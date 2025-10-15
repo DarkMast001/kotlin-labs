@@ -9,15 +9,17 @@ import java.math.RoundingMode
 
 class User(base: String, baseQuantity: String) : UserProvider {
     private val base: Currency = Currency.fromSymbol(base)
-    private val baseQuantity: BigDecimal = BigDecimal(baseQuantity).setScale(3, RoundingMode.HALF_UP)
+    private val baseQuantity: BigDecimal = BigDecimal(baseQuantity).setScale(this.base.decimalPlaces, RoundingMode.HALF_UP)
     private val currenciesMap: MutableMap<Currency, BigDecimal> = mutableMapOf(this.base to this.baseQuantity)
 
     fun getCurrencies() : Map<Currency, BigDecimal> = currenciesMap.toMap()
 
     override fun decreaseCurrency(currency: Currency, quantity: BigDecimal) {
+        val scaledQuantity = quantity.setScale(currency.decimalPlaces, RoundingMode.HALF_UP)
+
         val currentBalance = currenciesMap[currency] ?: throw NoSuchCurrencyException("No currency ${currency.symbol}.")
 
-        val newBalance = currentBalance.minus(quantity)
+        val newBalance = currentBalance.minus(scaledQuantity)
 
         if (newBalance < BigDecimal.ZERO) {
             throw InsufficientFundsException("Insufficient funds in ${currency.symbol}.")
@@ -32,6 +34,8 @@ class User(base: String, baseQuantity: String) : UserProvider {
     }
 
     override fun increaseCurrency(currency: Currency, quantity: BigDecimal) {
+        val scaledQuantity = quantity.setScale(currency.decimalPlaces, RoundingMode.HALF_UP)
+
         val currentBalance = currenciesMap[currency]
 
         if (currentBalance == null) {
@@ -39,7 +43,7 @@ class User(base: String, baseQuantity: String) : UserProvider {
             return
         }
 
-        val newBalance = currentBalance.plus(quantity)
+        val newBalance = currentBalance.plus(scaledQuantity)
 
         currenciesMap[currency] = newBalance
     }

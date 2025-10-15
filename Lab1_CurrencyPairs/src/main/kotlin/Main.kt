@@ -48,7 +48,14 @@ fun main() {
         print("> ")
         val str = readLine()
         str ?: break
-        val point = str.toInt()
+        var point = 0
+        try {
+            point = str.toInt()
+        }
+        catch (e: NumberFormatException) {
+            println("Enter number of point.")
+            continue
+        }
 
         when(point) {
             1 -> {

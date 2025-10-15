@@ -12,7 +12,8 @@ class Exchanger : ExchangerProvider {
     private val currencyPairs = mutableMapOf(
         CurrencyPair.create("USD", "RUB") to BigDecimal("1.0"),
         CurrencyPair.create("EUR", "RUB") to BigDecimal("1.0"),
-        CurrencyPair.create("EUR", "USD") to BigDecimal("1.0")
+        CurrencyPair.create("EUR", "USD") to BigDecimal("1.0"),
+        CurrencyPair.create("RUB", "JPY") to BigDecimal("1.0")
     )
     private val random = Random.Default
 
@@ -27,13 +28,13 @@ class Exchanger : ExchangerProvider {
         val currencyPairAmount2 = currencyPairs[CurrencyPair.create(quotedCurrency.symbol, baseCurrency.symbol)]
 
         if (currencyPairAmount1 != null) {
-            val quotedQuantity = baseQuantity.multiply(currencyPairAmount1)
+            val quotedQuantity = baseQuantity.multiply(currencyPairAmount1).setScale(quotedCurrency.decimalPlaces, RoundingMode.HALF_UP)
 
             user.decreaseCurrency(quotedCurrency, quotedQuantity)
             user.increaseCurrency(baseCurrency, baseQuantity)
         }
         else if (currencyPairAmount2 != null) {
-            val quotedQuantity = baseQuantity.divide(currencyPairAmount2, 3, RoundingMode.HALF_UP)
+            val quotedQuantity = baseQuantity.divide(currencyPairAmount2, quotedCurrency.decimalPlaces, RoundingMode.HALF_UP)
 
             user.decreaseCurrency(quotedCurrency, quotedQuantity)
             user.increaseCurrency(baseCurrency, baseQuantity)
@@ -46,9 +47,10 @@ class Exchanger : ExchangerProvider {
     }
 
     private fun changeValues() {
-        for (currencyPair in currencyPairs) {
+        for ((currencyPair, _) in currencyPairs) {
+            val quote = currencyPair.quote
             val rate = random.nextDouble(50.0, 150.0)
-            currencyPair.setValue(BigDecimal(rate.toString()).setScale(3, RoundingMode.HALF_UP))
+            currencyPairs[currencyPair] = BigDecimal(rate.toString()).setScale(quote.decimalPlaces, RoundingMode.HALF_UP)
         }
     }
 }
