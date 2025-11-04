@@ -59,53 +59,81 @@ fun benchmarkKotlinx() {
 suspend fun benchmarkKotlinxParallelAsCoroutine() {
     val sizes = listOf(10_000, 100_000, 500_000)
     val json = Json { encodeDefaults = true }
-    val parallelism = Runtime.getRuntime().availableProcessors()
 
-    for (size in sizes) {
-        println("=== kotlinx.serialization (JSON Lines) parallel: $size records ===")
+//    val parallelism = Runtime.getRuntime().availableProcessors()
+    val parallelism = 12
 
-        val data = generatePeople(size)
-        val jsonLines: String
+    var average10000s = 0.0
+    var average10000d = 0.0
+    var average100000s = 0.0
+    var average100000d = 0.0
+    var average500000s = 0.0
+    var average500000d = 0.0
 
-        val serializationTime = measureTimeMillis {
-            coroutineScope {
-                jsonLines = data
-                    .chunked((data.size + parallelism - 1) / parallelism)
-                    .map { chunk ->
-                        async(Dispatchers.Default) {
-                            chunk.joinToString("\n") { person ->
-                                json.encodeToString(Person.serializer(), person)
+    for (j in 0..9) {
+
+        for (size in sizes) {
+            println("=== kotlinx.serialization (JSON Lines) parallel: $size records ===")
+
+            val data = generatePeople(size)
+            val jsonLines: String
+
+            val serializationTime = measureTimeMillis {
+                coroutineScope {
+                    jsonLines = data
+                        .chunked((data.size + parallelism - 1) / parallelism)
+                        .map { chunk ->
+                            async(Dispatchers.Default) {
+                                chunk.joinToString("\n") { person ->
+                                    json.encodeToString(Person.serializer(), person)
+                                }
                             }
                         }
-                    }
-                    .awaitAll()
-                    .joinToString("\n")
+                        .awaitAll()
+                        .joinToString("\n")
+                }
             }
-        }
 
-        val deserializationTime = measureTimeMillis {
-            val lines = jsonLines.split("\n").filter { it.isNotBlank() }
-            val chunkSize = 10_000
+            val deserializationTime = measureTimeMillis {
+                val lines = jsonLines.split("\n").filter { it.isNotBlank() }
 
-            coroutineScope {
-                lines
-                    .chunked((lines.size + parallelism - 1) / parallelism)
-                    .map { chunk ->
-                        async(Dispatchers.Default) {
-                            chunk.map { line ->
-                                json.decodeFromString(Person.serializer(), line)
+                coroutineScope {
+                    lines
+                        .chunked((lines.size + parallelism - 1) / parallelism)
+                        .map { chunk ->
+                            async(Dispatchers.Default) {
+                                chunk.map { line ->
+                                    json.decodeFromString(Person.serializer(), line)
+                                }
                             }
                         }
-                    }
-                    .awaitAll()
-                    .flatten()
+                        .awaitAll()
+                        .flatten()
+                }
             }
+            if (size == 10_000){
+                average10000s += serializationTime
+                average10000d += deserializationTime
+            }
+            else if (size == 100_000){
+                average100000s += serializationTime
+                average100000d += deserializationTime
+            }
+            else{
+                average500000s += serializationTime
+                average500000d += deserializationTime
+            }
+//            println("Serialization: ${serializationTime} ms")
+//            println("Deserialization: ${deserializationTime} ms")
+//            println()
         }
-
-        println("Serialization: ${serializationTime} ms")
-        println("Deserialization: ${deserializationTime} ms")
-        println()
     }
+    println("Serialization for 10000 with $parallelism time: ${average10000s / 10}")
+    println("Deserialization for 10000 with $parallelism time: ${average10000d / 10}")
+    println("Serialization for 100000 with $parallelism time: ${average100000s / 10}")
+    println("Deserialization for 100000 with $parallelism time: ${average100000d / 10}")
+    println("Serialization for 500000 with $parallelism time: ${average500000s / 10}")
+    println("Deserialization for 500000 with $parallelism time: ${average500000d / 10}")
 }
 
 fun benchmarkCustom() {
@@ -138,110 +166,140 @@ fun benchmarkCustom() {
 suspend fun benchmarkCustomParallelAsCoroutine() {
     val sizes = listOf(10_000, 100_000, 500_000)
 
-    for(size in sizes) {
-        println("=== Custom TomlSerializer as parallel with coroutine: $size records ===")
+    val parallelism = Runtime.getRuntime().availableProcessors()
+        for(size in sizes) {
+            println("=== Custom TomlSerializer as parallel with coroutine: $size records ===")
 
-        val data = generatePeople(size)
+            val data = generatePeople(size)
 
-        val serialized: String
-        val parallelism = Runtime.getRuntime().availableProcessors()
+            val serialized: String
 
-        val serializationTime = measureTimeMillis {
-            coroutineScope {
-                serialized = data
-                    .chunked((data.size + parallelism - 1) / parallelism)
-                    .map { chunk ->
-                        async(Dispatchers.Default) {
-                            chunk.joinToString("\n\n\n") { TomlSerializer.serialize(it) }
+            val serializationTime = measureTimeMillis {
+                coroutineScope {
+                    serialized = data
+                        .chunked((data.size + parallelism - 1) / parallelism)
+                        .map { chunk ->
+                            async(Dispatchers.Default) {
+                                chunk.joinToString("\n\n\n") { TomlSerializer.serialize(it) }
+                            }
                         }
-                    }
-                    .awaitAll()
-                    .joinToString("\n\n\n")
+                        .awaitAll()
+                        .joinToString("\n\n\n")
+                }
             }
-        }
 
-        val deserializationTime = measureTimeMillis {
-            val blocks = serialized.split("\n\n\n").filter { it.isNotBlank() }
+            val deserializationTime = measureTimeMillis {
+                val blocks = serialized.split("\n\n\n").filter { it.isNotBlank() }
 
-            coroutineScope {
-                val deserialized = blocks
-                    .chunked((blocks.size + parallelism - 1) / parallelism)
-                    .map { chunk ->
-                        async(Dispatchers.Default) {
-                            chunk.map { TomlSerializer.deserialize<Person>(it) }
+                coroutineScope {
+                    val deserialized = blocks
+                        .chunked((blocks.size + parallelism - 1) / parallelism)
+                        .map { chunk ->
+                            async(Dispatchers.Default) {
+                                chunk.map { TomlSerializer.deserialize<Person>(it) }
+                            }
                         }
-                    }
-                    .awaitAll()
-                    .flatten()
+                        .awaitAll()
+                        .flatten()
+                }
             }
-        }
 
-        println("Serialization: ${serializationTime} ms")
-        println("Deserialization: ${deserializationTime} ms")
-        println()
-    }
+            println("Serialization: ${serializationTime} ms")
+            println("Deserialization: ${deserializationTime} ms")
+            println()
+        }
 }
 
 fun benchmarkCustomParallelAsThread() {
     val sizes = listOf(10_000, 100_000, 500_000)
 
-    val parallelism = Runtime.getRuntime().availableProcessors()
+//    val parallelism = Runtime.getRuntime().availableProcessors()
+    val parallelism = 12
 
-    for(size in sizes) {
-        println("=== Custom TomlSerializer as parallel with threads: $size records ===")
+    var average10000s = 0.0
+    var average10000d = 0.0
+    var average100000s = 0.0
+    var average100000d = 0.0
+    var average500000s = 0.0
+    var average500000d = 0.0
 
-        val data = generatePeople(size)
+    for(j in 0..9){
+        for(size in sizes) {
+            println("=== Custom TomlSerializer as parallel with threads: $size records ===")
 
-        var serialized: String
+            val data = generatePeople(size)
 
-        val chunkSizeSerialize = (data.size + parallelism - 1) / parallelism
-        val chunksSerialize = data.chunked(chunkSizeSerialize)
+            var serialized: String
 
-        val resultsSerialize = Array<String?>(chunksSerialize.size) { null }
-        val latchSerialize = CountDownLatch(chunksSerialize.size)
+            val chunkSizeSerialize = (data.size + parallelism - 1) / parallelism
+            val chunksSerialize = data.chunked(chunkSizeSerialize)
 
-        val serializationTime = measureTimeMillis {
-            for (i in chunksSerialize.indices) {
-                val chunk = chunksSerialize[i]
+            val resultsSerialize = Array<String?>(chunksSerialize.size) { null }
+            val latchSerialize = CountDownLatch(chunksSerialize.size)
 
-                Thread {
-                    resultsSerialize[i] = chunk.joinToString("\n\n\n") { TomlSerializer.serialize(it) }
-                    latchSerialize.countDown()
-                }.start()
+            val serializationTime = measureTimeMillis {
+                for (i in chunksSerialize.indices) {
+                    val chunk = chunksSerialize[i]
+
+                    Thread {
+                        resultsSerialize[i] = chunk.joinToString("\n\n\n") { TomlSerializer.serialize(it) }
+                        latchSerialize.countDown()
+                    }.start()
+                }
+
+                latchSerialize.await()
             }
 
-            latchSerialize.await()
-        }
-
-        serialized = resultsSerialize.joinToString("\n\n\n") { it ?: "" }
+            serialized = resultsSerialize.joinToString("\n\n\n") { it ?: "" }
 
 
 
-        val blocks = serialized.split("\n\n\n").filter { it.isNotBlank() }
+            val blocks = serialized.split("\n\n\n").filter { it.isNotBlank() }
 
-        val chunkSizeDeserialize = (blocks.size + parallelism - 1) / parallelism
-        val chunksDeserialize = blocks.chunked(chunkSizeDeserialize)
+            val chunkSizeDeserialize = (blocks.size + parallelism - 1) / parallelism
+            val chunksDeserialize = blocks.chunked(chunkSizeDeserialize)
 
-        val resultsDeserialize = Array<List<Person>?>(chunksDeserialize.size) { null }
-        val latchDeserialize = CountDownLatch(chunksDeserialize.size)
+            val resultsDeserialize = Array<List<Person>?>(chunksDeserialize.size) { null }
+            val latchDeserialize = CountDownLatch(chunksDeserialize.size)
 
-        val deserializationTime = measureTimeMillis {
-            for (i in chunksDeserialize.indices) {
-                val chunk = chunksDeserialize[i]
+            val deserializationTime = measureTimeMillis {
+                for (i in chunksDeserialize.indices) {
+                    val chunk = chunksDeserialize[i]
 
-                Thread {
-                    resultsDeserialize[i] = chunk.map { TomlSerializer.deserialize<Person>(it) }
-                    latchDeserialize.countDown()
-                }.start()
+                    Thread {
+                        resultsDeserialize[i] = chunk.map { TomlSerializer.deserialize<Person>(it) }
+                        latchDeserialize.countDown()
+                    }.start()
+                }
+
+                latchDeserialize.await()
             }
 
-            latchDeserialize.await()
-        }
+            if (size == 10_000){
+                average10000s += serializationTime
+                average10000d += deserializationTime
+            }
+            else if (size == 100_000){
+                average100000s += serializationTime
+                average100000d += deserializationTime
+            }
+            else{
+                average500000s += serializationTime
+                average500000d += deserializationTime
+            }
 
-        println("Serialization: ${serializationTime} ms")
-        println("Deserialization: ${deserializationTime} ms")
-        println()
+    //        println("Serialization: ${serializationTime} ms")
+    //        println("Deserialization: ${deserializationTime} ms")
+    //        println()
+        }
     }
+
+    println("Serialization for 10000 with $parallelism time: ${average10000s / 10}")
+    println("Deserialization for 10000 with $parallelism time: ${average10000d / 10}")
+    println("Serialization for 100000 with $parallelism time: ${average100000s / 10}")
+    println("Deserialization for 100000 with $parallelism time: ${average100000d / 10}")
+    println("Serialization for 500000 with $parallelism time: ${average500000s / 10}")
+    println("Deserialization for 500000 with $parallelism time: ${average500000d / 10}")
 }
 
 suspend fun main() {
@@ -251,13 +309,13 @@ suspend fun main() {
         warmup.map { TomlSerializer.serialize(it) }.joinToString("\n\n")
     }
 
-    benchmarkCustomParallelAsThread()
+//    benchmarkCustomParallelAsThread()
 
 //    benchmarkCustom()
 //    benchmarkKotlinx()
 //
 //    benchmarkCustomParallelAsCoroutine()
-//    benchmarkKotlinxParallelAsCoroutine()
+    benchmarkKotlinxParallelAsCoroutine()
 
 
 
